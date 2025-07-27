@@ -1,0 +1,89 @@
+import React, { useRef } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { TorusKnot, Environment, PerspectiveCamera } from '@react-three/drei';
+import { useTransform, MotionValue } from 'framer-motion';
+import { MathUtils, Mesh, PerspectiveCamera as ThreePerspectiveCamera } from 'three';
+import type { SceneProps } from '../types';
+
+function Product({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
+  const meshRef = useRef<Mesh>(null!);
+  const scale = useTransform(scrollYProgress, [0, 0.1], [1, 1.2]);
+
+  useFrame((_state, delta) => {
+    if (meshRef.current) {
+      meshRef.current.rotation.y += delta * 0.1;
+      const currentScale = scale.get();
+      meshRef.current.scale.set(currentScale, currentScale, currentScale);
+    }
+  });
+
+  return (
+    <TorusKnot ref={meshRef} args={[1, 0.3, 256, 32]}>
+      <meshStandardMaterial color="#3b82f6" metalness={0.8} roughness={0.1} />
+    </TorusKnot>
+  );
+}
+
+function AnimatedCamera({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
+  const cameraRef = useRef<ThreePerspectiveCamera>(null!);
+
+  // Define your 3 camera key positions
+  const cameraPositions = [
+    { x: 5, y: 2, z: 5 },   // Position A (start)
+    { x: -3, y: 4, z: 8 },  // Position B (mid scroll)
+    { x: 0, y: 6, z: -5 }   // Position C (end scroll)
+  ];
+
+  useFrame(() => {
+    if (!cameraRef.current) return;
+    const camera = cameraRef.current;
+
+    const progress = scrollYProgress.get(); // 0 → 1
+    let target;
+
+    if (progress < 0.5) {
+      // First half: interpolate A → B
+      const t = MathUtils.clamp(progress / 0.5, 0, 1);
+      target = {
+        x: MathUtils.lerp(cameraPositions[0].x, cameraPositions[1].x, t),
+        y: MathUtils.lerp(cameraPositions[0].y, cameraPositions[1].y, t),
+        z: MathUtils.lerp(cameraPositions[0].z, cameraPositions[1].z, t)
+      };
+    } else {
+      // Second half: interpolate B → C
+      const t = MathUtils.clamp((progress - 0.5) / 0.5, 0, 1);
+      target = {
+        x: MathUtils.lerp(cameraPositions[1].x, cameraPositions[2].x, t),
+        y: MathUtils.lerp(cameraPositions[1].y, cameraPositions[2].y, t),
+        z: MathUtils.lerp(cameraPositions[1].z, cameraPositions[2].z, t)
+      };
+    }
+
+    // Smoothly move toward target
+    camera.position.x = MathUtils.lerp(camera.position.x, target.x, 0.1);
+    camera.position.y = MathUtils.lerp(camera.position.y, target.y, 0.1);
+    camera.position.z = MathUtils.lerp(camera.position.z, target.z, 0.1);
+
+    // Always look at center
+    camera.lookAt(0, 0, 0);
+  });
+
+  return <PerspectiveCamera makeDefault ref={cameraRef} position={[5, 2, 5]} fov={60} />;
+}
+
+
+const Scene: React.FC<SceneProps> = ({ scrollYProgress }) => {
+  return (
+    <Canvas>
+      <ambientLight intensity={1.5} />
+      <pointLight position={[10, 10, 10]} intensity={100} />
+      <pointLight position={[-10, -10, -10]} intensity={50} color="#3b82f6" />
+      <Product scrollYProgress={scrollYProgress} />
+      <AnimatedCamera scrollYProgress={scrollYProgress} />
+      <Environment preset="city" />
+    </Canvas>
+    
+  );
+};
+
+export default Scene;
